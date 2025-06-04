@@ -230,7 +230,7 @@ pml4_get_page (uint64_t *pml4, const void *uaddr) {
  * Returns true if successful, false if memory allocation
  * failed. */
 bool
-pml4_set_page (uint64_t *pml4, void *upage, void *kpage, bool rw) {
+pml4_set_page (uint64_t *pml4, void *upage, void *kpage, bool rw) { //mapping
 	ASSERT (pg_ofs (upage) == 0);
 	ASSERT (pg_ofs (kpage) == 0);
 	ASSERT (is_user_vaddr (upage));
@@ -287,6 +287,27 @@ pml4_set_dirty (uint64_t *pml4, const void *vpage, bool dirty) {
 			invlpg ((uint64_t) vpage);
 	}
 }
+
+// bool
+// pml4_is_writable (uint64_t *pml4, const void *vpage) {
+// 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
+// 	return pte != NULL && (*pte & PTE_W) != 0;
+// };
+
+// void
+// pml4_set_writable (uint64_t *pml4, const void *vpage, bool writable) {
+// 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
+// 	if (pte) {
+// 		if (writable)
+// 			*pte |= PTE_W;
+// 		else
+// 			*pte &= ~(uint32_t) PTE_W;
+
+// 		if (rcr3 () == vtop (pml4))
+// 			invlpg ((uint64_t) vpage);
+// 	}
+// }
+
 
 /* Returns true if the PTE for virtual page VPAGE in PML4 has been
  * accessed recently, that is, between the time the PTE was

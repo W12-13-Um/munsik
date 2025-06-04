@@ -1,6 +1,9 @@
 #ifndef __LIB_KERNEL_HASH_H
 #define __LIB_KERNEL_HASH_H
 
+#define list_elem_to_hash_elem(LIST_ELEM) \
+	list_entry(LIST_ELEM, struct hash_elem, list_elem)
+
 /* Hash table.
  *
  * This data structure is thoroughly documented in the Tour of
@@ -96,5 +99,9 @@ bool hash_empty (struct hash *);
 uint64_t hash_bytes (const void *, size_t);
 uint64_t hash_string (const char *);
 uint64_t hash_int (int);
+
+
+void insert_elem(struct hash *h, struct list *bucket, struct hash_elem *e);
+void rehash(struct hash *h);
 
 #endif /* lib/kernel/hash.h */

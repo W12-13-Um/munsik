@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "vm.h": "c",
+        "hash.h": "c",
+        "file.h": "c",
+        "anon.h": "c"
+    }
+}
