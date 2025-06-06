@@ -146,6 +146,7 @@ page_fault (struct intr_frame *f) {
 	/* For project 3 and later. */
 	if (vm_try_handle_fault (f, fault_addr, user, write, not_present))
 		return;
+	exit(-1);
 #endif
 
 	/* Count page faults. */
@@ -159,4 +160,3 @@ page_fault (struct intr_frame *f) {
 	// 		user ? "user" : "kernel");
 	kill (f);
 }
-
