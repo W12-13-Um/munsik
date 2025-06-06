@@ -19,6 +19,8 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 bool check_address (const void *addr);
+static void check_user (const uint8_t *uaddr, size_t size);
+static void fail_invalid_access(void);
 
 /* System call.
  *
@@ -50,7 +52,10 @@ syscall_init (void) {
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f UNUSED) {
-	switch(f->R.rax) {
+#ifdef VM
+	thread_current()->rsp_stack = f->rsp;
+#endif
+	switch(f->R.rax) {                                                            
 		case SYS_HALT:                   /* Halt the operating system. */
 			halt();
 			break;
@@ -92,6 +97,10 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case SYS_CLOSE:                  /* Close a file. */
 			close(f->R.rdi);
+			break;
+		case SYS_MMAP:
+			break;
+		case SYS_MUNMAP:
 			break;
 		default:
 			exit(f->R.rdi);
@@ -191,6 +200,8 @@ int filesize (int fd) {
 int read (int fd, void *buffer, unsigned size) {
 	if (size == 0) return 0;
 	if (!check_address(buffer)) exit(-1);
+	check_user((const uint8_t *)buffer, size);
+
 #ifdef VM
     struct page *page = spt_find_page(&thread_current()->spt, buffer);
     if (page != NULL && !page->writable)
@@ -277,12 +288,57 @@ void close (int fd) {
 bool check_address(const void *addr) {
 	if (addr == NULL || !is_user_vaddr(addr)) 
 		return false;
-#ifndef VM
-	void *page = pml4_get_page(thread_current()->pml4, addr);
-#else
-	struct page *page = spt_find_page(&thread_current()->spt, addr);
-#endif
-	if (page == NULL)
+
+#ifdef VM
+	struct thread *t = thread_current();
+	struct page *page = spt_find_page(&t->spt, addr);
+
+	if (page == NULL) {
+		void *rsp = t->rsp_stack;
+		if (addr >= rsp - 32 && addr < USER_STACK) {
+			// 스택 확장은 rsp 기준으로 -32 byte 이하에서만 허용
+			return vm_stack_growth((void *)pg_round_down(addr));
+		}
 		return false;
+	}
 	return true;
+#else
+	void *page = pml4_get_page(thread_current()->pml4, addr);
+	return page != NULL;
+#endif
+}
+
+/* Try reading a byte at user address `uaddr`. Return byte or -1 if segfault. */
+static int32_t
+get_user (const uint8_t *uaddr) {
+  if ((void *)uaddr >= KERN_BASE)
+    return -1;
+
+	int result;
+	asm volatile ("movzbl %1, %0"
+				: "=&a" (result) : "m" (*uaddr));
+	
+  return result;
+}
+
+/* If uaddr is not readable user address, exit(-1). */
+static void
+check_user (const uint8_t *uaddr, size_t size) {
+	for (size_t offset = 0; offset < size; offset += 8) {
+		if (!check_address(uaddr + offset)) {
+			fail_invalid_access();
+		}
+	}
+	// 마지막 바이트도 확인 (offset이 8로 나누어떨어지지 않을 수 있음)
+	if (!check_address(uaddr + size - 1)) {
+		fail_invalid_access();
+	}
+}
+
+static void
+fail_invalid_access(void) {
+  if (lock_held_by_current_thread(&filesys_lock))
+    lock_release(&filesys_lock);
+  exit(-1);
+  NOT_REACHED();
 }
