@@ -39,10 +39,15 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
 	struct file_page *file_page UNUSED = &page->file;
-	size_t read_bytes = file_page->read_bytes;
-    if (file_read_at(file_page->file, kva, read_bytes, file_page->ofs) != read_bytes)
+
+	struct file *file = file_page->file;
+    off_t ofs = file_page->ofs;
+    size_t read_bytes = file_page->read_bytes;
+    size_t zero_bytes = PGSIZE - read_bytes;
+
+    if (file_read_at(file, kva, read_bytes, ofs) != read_bytes)
         return false;
-    memset(kva + read_bytes, 0, PGSIZE - read_bytes);
+    memset(kva + read_bytes, 0, zero_bytes);
     return true;
 }
 
@@ -50,17 +55,15 @@ file_backed_swap_in (struct page *page, void *kva) {
 static bool
 file_backed_swap_out (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
-	if (pml4_is_dirty(thread_current()->pml4, page->va)) {
+
+	if (pml4_is_dirty(thread_current()->pml4,page->va)){
 		file_write_at(file_page->file, page->frame->kva, file_page->read_bytes, file_page->ofs);
 		pml4_set_dirty(thread_current()->pml4, page->va, false);
-	}
-	// page->frame->page = NULL;
-	// page->frame = NULL;
+	} 
 	pml4_clear_page(thread_current()->pml4, page->va);
-
-	list_remove(&page->frame->frame_elem); // frame_table에서 제거
-	palloc_free_page(page->frame->kva);
-	free(page->frame);
+	list_remove(&page->frame->frame_elem);
+	// palloc_free_page(page->frame->kva);
+	// free(page->frame);
 	page->frame = NULL;
 	return true;
 }
@@ -69,16 +72,18 @@ file_backed_swap_out (struct page *page) {
 static void
 file_backed_destroy (struct page *page) {
 	struct file_page *file_page UNUSED = &page->file;
+	if (file_page->file == NULL)
+		return;
     if (pml4_is_dirty(thread_current()->pml4, page->va)) {
         file_write_at(file_page->file, page->frame->kva, file_page->read_bytes, file_page->ofs);
         pml4_set_dirty(thread_current()->pml4, page->va, false);
     }
     pml4_clear_page(thread_current()->pml4, page->va);
-
 	if (page->frame != NULL) {
-		list_remove(&page->frame->frame_elem);  // frame table에서 제거
+		list_remove(&page->frame->frame_elem);
 		palloc_free_page(page->frame->kva);
 		free(page->frame);
+		page->frame = NULL;
 	}
 }
 
@@ -95,7 +100,10 @@ do_mmap (void *addr, size_t length, int writable, struct file *file, off_t offse
 
 	void *ret = addr;
     while (read_bytes > 0 || zero_bytes > 0) {
-        size_t page_read_bytes = (read_bytes < PGSIZE) ? read_bytes : PGSIZE;
+		/* Do calculate how to fill this page.
+		 * We will read PAGE_READ_BYTES bytes from FILE
+		 * and zero the final PAGE_ZERO_BYTES bytes. */
+        size_t page_read_bytes = MIN(read_bytes, PGSIZE);
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
         struct lazy_load_args *aux = (struct lazy_load_args *)malloc(sizeof(struct lazy_load_args));
@@ -127,7 +135,9 @@ do_munmap (void *addr) {
 		if (page_get_type(page) != VM_FILE)
 			return;
 		destroy(page);
+		page->file.file = NULL;
 		list_remove(&page->file.elem);
+		// list_remove(&page->frame->frame_elem);
 		spt_remove_page(&curr->spt, page);
 		addr += PGSIZE;
 		page = spt_find_page(&curr->spt, addr);

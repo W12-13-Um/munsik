@@ -6,7 +6,7 @@
 #include "vm/inspect.h"
 
 struct list frame_table;
-static struct list_elem *clock_ptr = NULL;
+struct list_elem *fte;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -143,36 +143,57 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
-	if (list_empty(&frame_table)) return NULL;
-	if (!clock_ptr || clock_ptr == list_end(&frame_table))
-		clock_ptr = list_begin(&frame_table);
+	struct frame *victim = NULL;
+	 /* TODO: The policy for eviction is up to you. */
+	if (list_empty(&frame_table))
+		return NULL;
+
+	if (fte == NULL || fte == list_end(&frame_table))
+		fte = list_begin(&frame_table);
 
 	while (true) {
-		struct frame *frame = list_entry(clock_ptr, struct frame, frame_elem);
+		struct frame *frame = list_entry(fte, struct frame, frame_elem);
 		struct page *page = frame->page;
-		if (!pml4_is_accessed(thread_current()->pml4, page->va))
-			return frame;
-		else {
+
+		if (!pml4_is_accessed(thread_current()->pml4, page->va)) {
+			victim = frame;
+			break;
+		} else {
 			pml4_set_accessed(thread_current()->pml4, page->va, false);
-			clock_ptr = list_next(clock_ptr);
-			if (clock_ptr == list_end(&frame_table))
-				clock_ptr = list_begin(&frame_table);
+			fte = list_next(fte);
+			if (fte == list_end(&frame_table))
+				fte = list_begin(&frame_table);
 		}
 	}
+
+	return victim;
 }
 
 /* Evict one page and return the corresponding frame.
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim = vm_get_victim();
-	if (!victim || !swap_out(victim->page))
+	struct frame *victim UNUSED = vm_get_victim ();
+	/* TODO: swap out the victim and return the evicted frame. */
+	if (victim == NULL)
 		return NULL;
 
-	pml4_clear_page(thread_current()->pml4, victim->page->va);
-	list_remove(&victim->frame_elem);
-	victim->page->frame = NULL;
+	struct page *page = victim->page;
+
+	// swap out
+	if (!swap_out(page))
+		return NULL;
+
+	// unmap VA to PA
+	pml4_clear_page(thread_current()->pml4, page->va);
+
+	// 연결 해제
 	victim->page = NULL;
+	page->frame = NULL;
+
+	// frame table에서 제거
+	list_remove(&victim->frame_elem);
+
 	return victim;
 }
 
@@ -186,14 +207,15 @@ vm_get_frame (void) {
 	/* TODO: Fill this function. */
 	void *kva = palloc_get_page(PAL_USER | PAL_ZERO);
     if (kva == NULL) {
-		// 메모리 부족 → evict 필요
+        // 메모리 부족 → evict 필요
 		struct frame *victim = vm_evict_frame();
 		if (victim == NULL)
 			PANIC("No frame to evict!");
+
 		kva = victim->kva;
 		free(victim);  // 회수한 frame 구조체 메모리 해제
 	}
-
+	
 	frame = (struct frame *)malloc(sizeof(struct frame));
 	frame->kva = kva;
 	frame->page = NULL;
@@ -236,6 +258,7 @@ vm_handle_wp (struct page *page UNUSED) {
 /* Return true on success */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+	// printf("[vm_try_handle_fault] addr=%p rsp=%p user=%d\n", addr, f->rsp, user);
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
@@ -247,12 +270,16 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED, bool user U
     if (page == NULL) {
 		/* If you have confirmed that the fault can be handled with a stack growth,
 		 * call vm_stack_growth with the faulted address. */
-		if (f->rsp - PGSIZE < addr && addr < USER_STACK && f->rsp - PGSIZE >= STACK_LIMIT) {
+		void *rsp = thread_current()->stack_pointer;
+		if (rsp - PGSIZE < addr && addr < USER_STACK && rsp - PGSIZE >= STACK_LIMIT) {
 			if (!vm_stack_growth(addr))
 				return false;
 			page = spt_find_page(spt, addr);
-		} else
+		} else {
+			// printf("[vm_try_handle_fault] rsp condition fault: %d %d %d\n", rsp - PGSIZE < addr, addr < USER_STACK, rsp - PGSIZE >= STACK_LIMIT);
+			// printf("%p %p\n", rsp - PGSIZE, addr);
 			return false;
+		}
 	}
 	if (write && !page->writable)
 		return false;
