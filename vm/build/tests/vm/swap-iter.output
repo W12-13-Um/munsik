@@ -18,16 +18,35 @@ Executing 'swap-iter':
 (swap-iter) write sparsely over page 0
 (swap-iter) write sparsely over page 512
 (swap-iter) write sparsely over page 1024
-Kernel PANIC at ../../vm/vm.c:178 in vm_get_frame(): todo
-Call stack: 0x80042185fc 0x8004221c58 0x800422202b 0x8004221f5c 0x800421d657 0x80042095e0 0x80042099fe 0x400e2e 0x400e77.
-The `backtrace' program can make call stacks useful.
-Read "Backtraces" in the "Debugging Tools" chapter
-of the Pintos documentation for more information.
-Timer: 606 ticks
-Thread: 397 idle ticks, 170 kernel ticks, 39 user ticks
+(swap-iter) write sparsely over page 1536
+(swap-iter) write sparsely over page 2048
+(swap-iter) write sparsely over page 2560
+(swap-iter) write sparsely over page 3072
+(swap-iter) write sparsely over page 3584
+(swap-iter) write sparsely over page 4096
+(swap-iter) write sparsely over page 4608
+(swap-iter) open "large.txt"
+(swap-iter) mmap "large.txt"
+(swap-iter) check consistency in page 0
+(swap-iter) check consistency in page 512
+(swap-iter) check consistency in page 1024
+(swap-iter) check consistency in page 1536
+(swap-iter) check consistency in page 2048
+(swap-iter) check consistency in page 2560
+(swap-iter) check consistency in page 3072
+(swap-iter) check consistency in page 3584
+(swap-iter) check consistency in page 4096
+(swap-iter) check consistency in page 4608
+(swap-iter) end
+swap-iter: exit(0)
+Execution of 'swap-iter' complete.
+Timer: 5680 ticks
+Thread: 3541 idle ticks, 211 kernel ticks, 1929 user ticks
 hd0:0: 0 reads, 0 writes
-hd0:1: 116 reads, 15902 writes
+hd0:1: 11858 reads, 15902 writes
 hd1:0: 7932 reads, 0 writes
-hd1:1: 0 reads, 0 writes
-Console: 1400 characters output
-Key
+hd1:1: 45336 reads, 84432 writes
+Console: 1928 characters output
+Keyboard: 0 keys pressed
+Exception: 0 page faults
+Powering off...
